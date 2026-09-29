@@ -129,6 +129,7 @@ final class SettingsWindow: NSWindow {
             return "brew install wireguard-tools"
         }
         return "sudo tee /etc/sudoers.d/wireguard-tray > /dev/null <<'EOF'\n"
+            + "Defaults secure_path=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\"\n"
             + "%admin ALL=(root) NOPASSWD: \(wgQuick) up *, \(wgQuick) down *\n"
             + "EOF\n"
             + "sudo chmod 440 /etc/sudoers.d/wireguard-tray\n"

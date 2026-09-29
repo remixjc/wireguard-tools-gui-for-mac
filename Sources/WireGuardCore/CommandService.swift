@@ -69,10 +69,22 @@ public struct CommandService {
     public static var wgQuickPath: String? {
         if let prefix = brewPrefix {
             for candidate in ["\(prefix)/bin/wg-quick", "\(prefix)/sbin/wg-quick", "\(prefix)/opt/wireguard-tools/sbin/wg-quick"] {
-                if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
+                if FileManager.default.isExecutableFile(atPath: candidate) {
+                    // 解析符号链接为真实路径（brew bin 下是 symlink），
+                    // 与 sudoers 规则一致，保证 sudo 免密匹配成功
+                    return URL(fileURLWithPath: candidate).resolvingSymlinksInPath().path
+                }
             }
         }
-        return which("wg-quick")
+        if let path = which("wg-quick") {
+            return URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        }
+        return nil
+    }
+
+    /// Homebrew bin 目录（Apple Silicon: /opt/homebrew/bin；Intel: /usr/local/bin）
+    public static var homebrewBin: String? {
+        brewPrefix.map { "\($0)/bin" }
     }
 
     // MARK: - 状态查询（无需 root）
@@ -157,14 +169,18 @@ public struct CommandService {
 
     /// 安装一次性免密 sudoers（写 /etc/sudoers.d/wireguard-tray + chmod + visudo -c），
     /// 经 AppleScript 管理员权限执行。返回 (output, exitCode)，成功时 exitCode == 0。
+    /// 规则同时写入 secure_path（含 Homebrew bin），保证 sudo 执行 wg-quick 时
+    /// `#!/usr/bin/env bash` 解析到 bash 4+（系统 /bin/bash 为 3.2 会直接拒绝）。
     public static func installSudoers() -> (output: String, exitCode: Int32) {
         guard let wgQuick = wgQuickPath else {
             return ("wg-quick 未找到，请先 brew install wireguard-tools", 1)
         }
+        let securePath = "\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\""
         let script = """
         #!/bin/bash
         set -e
         tee /etc/sudoers.d/wireguard-tray > /dev/null <<'WGEOF'
+        Defaults secure_path=\(securePath)
         %admin ALL=(root) NOPASSWD: \(wgQuick) up *, \(wgQuick) down *
         WGEOF
         chmod 440 /etc/sudoers.d/wireguard-tray
@@ -216,11 +232,14 @@ public struct CommandService {
     /// 生成 AppleScript 管理员提权脚本。
     /// 参数先各自做 shell 转义（`"..."`），再把整条命令嵌入 AppleScript 字符串时
     /// 转义其中的双引号与反斜杠，避免双重引号导致的 -2740 语法错误。
+    /// 前置 export PATH（含 Homebrew bin），使 `#!/usr/bin/env bash` 脚本（wg-quick）
+    /// 解析到 Homebrew bash 4+ 而非系统 bash 3.2。
     private static func adminScript(_ args: [String]) -> String {
         let command = args.map(shellEscaped).joined(separator: " ")
         var escaped = command.replacingOccurrences(of: "\\", with: "\\\\")
         escaped = escaped.replacingOccurrences(of: "\"", with: "\\\"")
-        return "do shell script \"\(escaped)\" with administrator privileges"
+        let pathPrefix = homebrewBin.map { "export PATH=\($0):$PATH; " } ?? ""
+        return "do shell script \"\(pathPrefix)\(escaped)\" with administrator privileges"
     }
 
     private static func shellEscaped(_ value: String) -> String {
