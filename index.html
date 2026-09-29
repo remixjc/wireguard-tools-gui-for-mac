@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WireGuard Tray — macOS 菜单栏隧道管理</title>
+<meta name="description" content="基于 Homebrew wireguard-tools 的 macOS 菜单栏应用：查看状态、一键启停、管理配置，本地优先、开源免费。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='26' fill='none' stroke='%233FD0C9' stroke-width='7' stroke-dasharray='96 67' stroke-linecap='round' transform='rotate(-60 32 32)'/%3E%3Ccircle cx='32' cy='32' r='11' fill='%232EE26E'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0B0F14;
+  --bg-soft:#11161D;
+  --bg-card:#141A22;
+  --line:rgba(255,255,255,.08);
+  --line-strong:rgba(255,255,255,.16);
+  --text:#E8EDF2;
+  --muted:#9AA6B2;
+  --green:#2EE26E;
+  --green-dim:rgba(46,226,110,.14);
+  --cyan:#3FD0C9;
+  --cyan-dim:rgba(63,208,201,.12);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Segoe UI",sans-serif;
+  --radius:14px;
+  --content:1080px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.7;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:rgba(46,226,110,.25)}
+a{color:inherit;text-decoration:none}
+img{max-width:100%}
+.wrap{max-width:var(--content);margin:0 auto;padding:0 24px}
+.mono{font-family:var(--mono)}
+.green{color:var(--green)}
+.cyan{color:var(--cyan)}
+
+/* ===== 顶栏 ===== */
+.nav{position:sticky;top:0;z-index:50;background:rgba(11,15,20,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.nav-in{display:flex;align-items:center;justify-content:space-between;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px}
+.brand-mark{width:26px;height:26px;flex:none}
+.brand small{color:var(--muted);font-weight:400;font-size:12px;margin-left:2px}
+.nav-links{display:flex;align-items:center;gap:22px;font-size:14px;color:var(--muted)}
+.nav-links a:hover{color:var(--text)}
+.lang-switch{display:flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden;font-size:12px}
+.lang-switch button{background:transparent;border:0;color:var(--muted);padding:5px 12px;cursor:pointer;font-family:var(--sans)}
+.lang-switch button.on{background:var(--green-dim);color:var(--green)}
+@media(max-width:760px){.nav-links a.hide-m{display:none}}
+
+/* ===== Hero ===== */
+.hero{padding:96px 0 56px;position:relative}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(620px 380px at 78% -40px,rgba(46,226,110,.10),transparent 65%),
+              radial-gradient(520px 320px at 12% 110%,rgba(63,208,201,.08),transparent 65%)}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;color:var(--muted);border:1px solid var(--line);padding:6px 14px;border-radius:999px;margin-bottom:26px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px var(--green-dim);display:inline-block}
+.hero h1{font-size:clamp(40px,6.4vw,72px);line-height:1.08;letter-spacing:-.02em;font-weight:800;max-width:15em}
+.hero h1 .line{display:block}
+.hero h1 .accent{background:linear-gradient(90deg,var(--green),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero-sub{margin-top:22px;font-size:clamp(16px,2vw,19px);color:var(--muted);max-width:34em}
+.hero-cta{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 26px;border-radius:11px;font-size:15px;font-weight:600;transition:transform .15s,background .15s,border-color .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background:linear-gradient(90deg,var(--green),var(--cyan));color:#04140C;box-shadow:0 8px 30px rgba(46,226,110,.22)}
+.btn-primary:hover{box-shadow:0 10px 36px rgba(46,226,110,.32)}
+.btn-ghost{border:1px solid var(--line-strong);color:var(--text)}
+.btn-ghost:hover{border-color:var(--green);color:var(--green)}
+.hero-checks{display:flex;flex-wrap:wrap;gap:18px;margin-top:30px;font-size:13.5px;color:var(--muted)}
+.hero-checks span{display:inline-flex;align-items:center;gap:7px}
+.hero-checks svg{flex:none}
+
+/* ===== 产品 mock ===== */
+.showcase{margin:64px auto 0;max-width:980px;position:relative}
+.showcase-glow{position:absolute;inset:-8% -4%;background:radial-gradient(700px 300px at 50% 40%,rgba(46,226,110,.09),transparent 70%);pointer-events:none}
+.menubar{background:rgba(255,255,255,.04);border:1px solid var(--line);border-bottom:0;border-radius:12px 12px 0 0;padding:10px 18px;display:flex;justify-content:flex-end;align-items:center;gap:16px;font-size:12.5px;color:var(--muted)}
+.menubar .traymock{display:flex;align-items:center;gap:12px}
+.menubar svg{width:15px;height:15px;opacity:.7}
+.menu{background:var(--bg-card);border:1px solid var(--line-strong);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden}
+.menu-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.menu-status{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--green);font-family:var(--mono)}
+.menu-status .dot{width:9px;height:9px}
+.menu-status.on{color:var(--green)}
+.menu-row{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--line);font-size:14px}
+.menu-row .conf{display:flex;align-items:center;gap:10px}
+.conf-badge{font-family:var(--mono);font-size:11px;color:var(--cyan);border:1px solid var(--cyan-dim);background:var(--cyan-dim);border-radius:6px;padding:2px 8px}
+.row-meta{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.menu-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.menu-action{border:1px solid var(--line-strong);border-radius:9px;text-align:center;padding:10px 0;font-size:13.5px;color:var(--text);cursor:pointer;transition:border-color .15s,color .15s;background:transparent}
+.menu-action.on{border-color:var(--green);color:var(--green)}
+.menu-action:hover{border-color:var(--green)}
+.menu-foot{display:flex;gap:20px;padding:12px 18px;font-size:13px;color:var(--muted)}
+.menu-foot span{cursor:pointer}
+.menu-foot span:hover{color:var(--text)}
+.menu-tip{margin-top:12px;text-align:center;font-size:12.5px;color:var(--muted)}
+.menu-tip .mono{color:var(--cyan)}
+
+/* ===== 指标 ===== */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin:72px 0 0}
+.stat{background:var(--bg-card);padding:26px 22px;text-align:center}
+.stat b{display:block;font-size:30px;font-weight:800;letter-spacing:-.02em;font-family:var(--mono)}
+.stat b .g{color:var(--green)}.stat b .c{color:var(--cyan)}
+.stat span{display:block;margin-top:6px;font-size:13px;color:var(--muted)}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.stats{grid-template-columns:1fr 1fr}.stat{padding:20px 14px}}
+
+/* ===== 章节 ===== */
+.sec{padding:88px 0 0}
+.sec-head{max-width:720px;margin:0 auto 44px;text-align:center}
+.sec-tag{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--green);text-transform:none}
+.sec-head h2{font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-.02em;line-height:1.15;margin-top:12px}
+.sec-head h2 .line{display:block}
+.sec-head p{margin-top:14px;color:var(--muted);font-size:15.5px}
+
+/* ===== 能力清单 ===== */
+.caps{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.cap{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:26px 26px 28px;transition:border-color .18s,transform .18s}
+.cap:hover{border-color:var(--green);transform:translateY(-2px)}
+.cap-num{font-family:var(--mono);font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:10px}
+.cap-num i{width:26px;height:1px;background:var(--line-strong)}
+.cap h3{font-size:18.5px;font-weight:700;margin:14px 0 8px;letter-spacing:-.01em}
+.cap p{font-size:14px;color:var(--muted)}
+.cap .tag-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.tag{font-family:var(--mono);font-size:11.5px;padding:3px 10px;border-radius:999px;border:1px solid var(--line)}
+.tag.g{border-color:var(--green-dim);color:var(--green);background:var(--green-dim)}
+.tag.c{border-color:var(--cyan-dim);color:var(--cyan);background:var(--cyan-dim)}
+@media(max-width:800px){.caps{grid-template-columns:1fr}}
+
+/* ===== 流程四步 ===== */
+.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.flow-step{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px 22px;position:relative}
+.flow-step .f-num{font-family:var(--mono);font-size:13px;color:var(--cyan);display:flex;align-items:center;gap:9px}
+.flow-step .f-num i{width:22px;height:1px;background:var(--cyan-dim)}
+.flow-step .f-ico{display:block;margin:16px 0 12px;color:var(--green)}
+.flow-step h3{font-size:16.5px;font-weight:700}
+.flow-step p{font-size:13.5px;color:var(--muted);margin-top:6px}
+.flow-step code{font-family:var(--mono);font-size:11.5px;color:var(--cyan);background:var(--cyan-dim);border-radius:6px;padding:2px 7px;white-space:nowrap}
+.flow-line{display:none}
+@media(max-width:900px){.flow{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.flow{grid-template-columns:1fr}}
+
+/* ===== 安全 ===== */
+.security{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;background:var(--bg-card);border:1px solid var(--line);border-radius:18px;padding:44px 40px}
+.sec-left h2{font-size:clamp(24px,3vw,34px);font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.sec-left h2 .line{display:block}
+.sec-left p{margin-top:14px;color:var(--muted);font-size:14.5px}
+.sec-list{margin-top:24px;display:grid;gap:14px}
+.sec-item{display:flex;gap:12px;font-size:14px;color:var(--text)}
+.sec-item svg{flex:none;margin-top:3px}
+.sec-item small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.code-block{background:#0D1218;border:1px solid var(--line-strong);border-radius:12px;padding:18px 20px;font-family:var(--mono);font-size:12.5px;line-height:1.9;color:#C7D3DF;overflow-x:auto}
+.code-block .k{color:var(--green)}
+.code-block .c{color:var(--cyan)}
+.code-block .m{color:var(--muted)}
+.code-note{margin-top:10px;font-size:12.5px;color:var(--muted);text-align:center}
+@media(max-width:900px){.security{grid-template-columns:1fr;padding:32px 24px}}
+
+/* ===== 时间轴 ===== */
+.road{display:grid;grid-template-columns:auto auto 1fr;gap:18px;max-width:820px;margin:0 auto}
+.road .r-time{text-align:right;font-family:var(--mono);font-size:12.5px;color:var(--muted);padding-top:4px;white-space:nowrap}
+.road .r-dot{position:relative;display:flex;justify-content:center;padding-top:6px}
+.road .r-dot::after{content:"";position:absolute;top:14px;bottom:-30px;width:1px;background:var(--line-strong)}
+.road:last-child .r-dot::after{display:none}
+.road .r-dot span{width:10px;height:10px;border-radius:50%;background:var(--bg);border:2px solid var(--green);position:relative;z-index:1;flex:none}
+.road .r-dot span.soon{border-color:var(--muted)}
+.road .r-card{background:var(--bg-card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:26px}
+.road .r-card h3{font-size:15.5px;font-weight:700;display:flex;align-items:center;gap:9px}
+.road .r-card h3 .st{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:999px;letter-spacing:.06em}
+.road .r-card h3 .st.done{background:var(--green-dim);color:var(--green)}
+.road .r-card h3 .st.now{background:var(--cyan-dim);color:var(--cyan)}
+.road .r-card h3 .st.plan{background:rgba(255,255,255,.06);color:var(--muted)}
+.road .r-card p{font-size:13px;color:var(--muted);margin-top:5px}
+@media(max-width:640px){.road{grid-template-columns:auto auto 1fr;gap:10px}.road .r-card{padding:12px 14px}}
+
+/* ===== 发布 ===== */
+.release{text-align:center;background:var(--bg-card);border:1px solid var(--line);border-radius:18px;padding:56px 30px}
+.release .ver{font-family:var(--mono);font-size:13px;color:var(--cyan)}
+.release h2{font-size:clamp(26px,3.4vw,38px);font-weight:800;letter-spacing:-.02em;margin-top:10px}
+.release p{margin-top:14px;color:var(--muted);font-size:15px;max-width:38em;margin-left:auto;margin-right:auto}
+.release .cta{margin-top:28px}
+.plats{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:30px;font-size:13px;color:var(--muted)}
+.plats span{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:7px 16px}
+.plats b{color:var(--text);font-weight:600}
+
+/* ===== FAQ ===== */
+.faq{max-width:760px;margin:0 auto;display:grid;gap:12px}
+details{background:var(--bg-card);border:1px solid var(--line);border-radius:12px;padding:0 22px;transition:border-color .15s}
+details[open]{border-color:var(--line-strong)}
+summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:17px 0;font-size:15px;font-weight:600}
+summary::-webkit-details-marker{display:none}
+summary .plus{font-family:var(--mono);color:var(--green);font-size:16px;transition:transform .2s;flex:none}
+details[open] summary .plus{transform:rotate(45deg)}
+details .ans{padding:0 0 18px;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
+details .ans code{font-family:var(--mono);font-size:12.5px;color:var(--cyan);background:var(--cyan-dim);border-radius:6px;padding:2px 7px}
+
+/* ===== Footer ===== */
+.foot{border-top:1px solid var(--line);margin-top:96px;padding:44px 0 56px}
+.foot-in{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center}
+.foot-l{font-size:13px;color:var(--muted)}
+.foot-l a{color:var(--muted);border-bottom:1px solid var(--line-strong)}
+.foot-l a:hover{color:var(--text)}
+.foot-r{display:flex;gap:20px;font-size:13px;color:var(--muted)}
+.foot-r a:hover{color:var(--text)}
+
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ===== 顶栏 ===== -->
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">
+      <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="25" fill="none" stroke="#3FD0C9" stroke-width="7" stroke-dasharray="92 64" stroke-linecap="round" transform="rotate(-60 32 32)"/>
+        <circle cx="32" cy="32" r="11" fill="#2EE26E"/>
+      </svg>
+      <span data-i18n="brand">WireGuard Tray<small> · macOS</small></span>
+    </a>
+    <nav class="nav-links">
+      <a href="#caps" data-i18n="navCap">能力</a>
+      <a href="#flow" data-i18n="navFlow">使用流程</a>
+      <a href="#security" data-i18n="navSec">安全</a>
+      <a href="#road" data-i18n="navRoad">路线图</a>
+      <a href="#faq" data-i18n="navFaq">FAQ</a>
+      <a class="hide-m" href="https://github.com/remixjc/wireguard-tools-gui-for-mac" target="_blank" rel="noopener">GitHub ↗</a>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button data-lang="zh" class="on">中</button>
+        <button data-lang="en">EN</button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<!-- ===== Hero ===== -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <span class="hero-eyebrow"><span class="dot"></span><span data-i18n="heroEyebrow">macOS 菜单栏 · Homebrew wireguard-tools · 开源</span></span>
+    <h1>
+      <span class="line" data-i18n="heroH1a">让隧道，</span>
+      <span class="line"><span class="accent" data-i18n="heroH1b">自然地待在那里。</span></span>
+    </h1>
+    <p class="hero-sub" data-i18n="heroSub">菜单栏里的 WireGuard 隧道管家：实时查看状态、一键启停、管理配置与 PostUp/PostDown 网卡，全部在本机完成。</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="https://github.com/remixjc/wireguard-tools-gui-for-mac/releases" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <span data-i18n="ctaDownload">下载 v0.1.0</span>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/remixjc/wireguard-tools-gui-for-mac" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9c0-1 .1-1.7-.5-2.4 1.6-.2 3.5-1 3.5-4a3.4 3.4 0 0 0-1-2.4c.1-.2.4-1.3-.1-2.7 0 0-1-.2-3 1.2a10 10 0 0 0-5.5 0C5.6 4.9 4.6 5 4.6 5c-.5 1.4-.2 2.5-.1 2.7a3.4 3.4 0 0 0-1 2.4c0 3 1.9 3.8 3.5 4-.4.6-.5 1.4-.5 2.4V22"/></svg>
+        <span data-i18n="ctaSource">浏览源代码</span>
+      </a>
+    </div>
+    <div class="hero-checks">
+      <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2EE26E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span data-i18n="check1">本地优先</span></span>
+      <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2EE26E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span data-i18n="check2">开源免费</span></span>
+      <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2EE26E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span data-i18n="check3">无云端依赖</span></span>
+    </div>
+  </div>
+
+  <!-- 产品 mock -->
+  <div class="wrap showcase">
+    <div class="showcase-glow"></div>
+    <div class="menubar">
+      <div class="traymock">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V7a2 2 0 0 1 2-2h2l2-2h4l2 2h2a2 2 0 0 1 2 2v2"/><path d="M4 9h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5h14M5 16.5h9"/><path d="M3 8.5a9 9 0 0 1 18 0v0"/></svg>
+        <span class="mono">09:41</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 10V8a6 6 0 0 0-12 0v2"/><rect x="4" y="10" width="16" height="9" rx="2.5"/></svg>
+        <svg width="18" height="18" viewBox="0 0 64 64"><circle cx="32" cy="32" r="25" fill="none" stroke="#3FD0C9" stroke-width="7" stroke-dasharray="92 64" stroke-linecap="round" transform="rotate(-60 32 32)"/><circle cx="32" cy="32" r="11" fill="#2EE26E"/></svg>
+      </div>
+    </div>
+    <div class="menu">
+      <div class="menu-head">
+        <span class="menu-status on"><span class="dot"></span><span data-i18n="mockStatus">已连接 · utun8</span></span>
+        <span style="flex:1"></span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9AA6B2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+      </div>
+      <div class="menu-row">
+        <span class="conf"><span class="conf-badge">WG</span><span>fire</span></span>
+        <span class="row-meta">wg-quick · /opt/homebrew/etc/wireguard</span>
+      </div>
+      <div class="menu-row">
+        <span class="conf"><span class="conf-badge" style="color:var(--muted);border-color:var(--line-strong);background:transparent">WG</span><span style="color:var(--muted)">home</span></span>
+        <span class="row-meta">未运行</span>
+      </div>
+      <div class="menu-actions">
+        <span class="menu-action on" data-i18n="mockStop">关闭代理</span>
+        <span class="menu-action" data-i18n="mockDetail">查看详情</span>
+      </div>
+      <div class="menu-foot">
+        <span data-i18n="mockSettings">设置</span>
+        <span data-i18n="mockQuit">退出</span>
+        <span style="flex:1"></span>
+        <span class="mono" style="font-size:11.5px">v0.1.0</span>
+      </div>
+    </div>
+    <p class="menu-tip"><span class="mono">wg-quick down fire</span> <span data-i18n="mockTip">· 状态点随隧道实时变化</span></p>
+  </div>
+</section>
+
+<!-- ===== 指标 ===== -->
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><b class="g">1</b><span data-i18n="stat1a">个</span><span data-i18n="stat1b">菜单栏入口</span></div>
+    <div class="stat"><b class="c">2</b><span data-i18n="stat2a">条</span><span data-i18n="stat2b">提权路径（免密 / 管理员）</span></div>
+    <div class="stat"><b class="g">0</b><span data-i18n="stat3a">次</span><span data-i18n="stat3b">云端上传</span></div>
+    <div class="stat"><b class="c">2</b><span data-i18n="stat4a">种</span><span data-i18n="stat4b">网卡引用（设备 / 服务名）</span></div>
+  </div>
+</div>
+<!-- ===== 能力 ===== -->
+<section class="sec" id="caps">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-tag" data-i18n="capsTag">CAPABILITIES</div>
+      <h2><span class="line" data-i18n="capsH1">复杂留给 wg-quick，</span><span class="line" data-i18n="capsH2">简单留给你。</span></h2>
+      <p data-i18n="capsSub">从菜单栏点开，到隧道上线，每个环节都清晰、可控。</p>
+    </div>
+    <div class="caps">
+      <div class="cap">
+        <div class="cap-num"><i></i><span data-i18n="cap1Num">01 · STATUS</span></div>
+        <h3 data-i18n="cap1T">状态一目了然</h3>
+        <p data-i18n="cap1D">菜单栏绿点 / 灰点实时反映隧道连接；详情窗口显示接口名、运行标记与配置文件路径，外部启动的隧道也能正确识别。</p>
+        <div class="tag-row"><span class="tag g">utun8</span><span class="tag c">wg-quick</span></div>
+      </div>
+      <div class="cap">
+        <div class="cap-num"><i></i><span data-i18n="cap2Num">02 · TOGGLE</span></div>
+        <h3 data-i18n="cap2T">一键启停</h3>
+        <p data-i18n="cap2D">基于 wg-quick up / down 启停隧道。一次性安装 sudoers 白名单后全程免密；未安装时自动回退到管理员授权弹窗。</p>
+        <div class="tag-row"><span class="tag g">NOPASSWD</span><span class="tag c">osascript</span></div>
+      </div>
+      <div class="cap">
+        <div class="cap-num"><i></i><span data-i18n="cap3Num">03 · CONFIG</span></div>
+        <h3 data-i18n="cap3T">配置即文件</h3>
+        <p data-i18n="cap3D">自动扫描 /etc/wireguard、/usr/local/etc/wireguard 与 /opt/homebrew/etc/wireguard 等标准路径，按名称去重列出，随时打开配置目录。</p>
+        <div class="tag-row"><span class="tag c">fire.conf</span></div>
+      </div>
+      <div class="cap">
+        <div class="cap-num"><i></i><span data-i18n="cap4Num">04 · POSTUP</span></div>
+        <h3 data-i18n="cap4T">网卡编辑</h3>
+        <p data-i18n="cap4D">PostUp / PostDown 中的接口引用可从系统枚举选择：支持设备名（utun8）与 networksetup 网络服务名（Ethernet），下拉即改、改完即存。</p>
+        <div class="tag-row"><span class="tag g">Ethernet</span><span class="tag c">networksetup</span></div>
+      </div>
+      <div class="cap">
+        <div class="cap-num"><i></i><span data-i18n="cap5Num">05 · L10N</span></div>
+        <h3 data-i18n="cap5T">中英双语</h3>
+        <p data-i18n="cap5D">界面语言一键切换，状态、详情、设置与报错文案跟随你的使用习惯，开源协议与文档同样中英双写。</p>
+        <div class="tag-row"><span class="tag g">中文</span><span class="tag c">English</span></div>
+      </div>
+      <div class="cap">
+        <div class="cap-num"><i></i><span data-i18n="cap6Num">06 · OPEN</span></div>
+        <h3 data-i18n="cap6T">纯原生 AppKit</h3>
+        <p data-i18n="cap6D">无第三方依赖的 SwiftPM 工程，菜单栏、窗口、系统枚举全部使用系统原生能力，构建与审计都更简单。</p>
+        <div class="tag-row"><span class="tag c">SwiftPM</span><span class="tag g">MIT</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 流程 ===== -->
+<section class="sec" id="flow">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-tag" data-i18n="flowTag">WORKFLOW</div>
+      <h2><span class="line" data-i18n="flowH1">四步，</span><span class="line" data-i18n="flowH2">跑起一条隧道。</span></h2>
+    </div>
+    <div class="flow">
+      <div class="flow-step">
+        <span class="f-num"><i></i><span data-i18n="f1Num">01</span></span>
+        <svg class="f-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V7a2 2 0 0 1 2-2h2l2-2h4l2 2h2a2 2 0 0 1 2 2v2"/><path d="M4 9h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+        <h3 data-i18n="f1T">安装</h3>
+        <p><code>brew install wireguard-tools</code><br><span data-i18n="f1D">配置放入 /opt/homebrew/etc/wireguard</span></p>
+      </div>
+      <div class="flow-step">
+        <span class="f-num"><i></i><span data-i18n="f2Num">02</span></span>
+        <svg class="f-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1.6"/></svg>
+        <h3 data-i18n="f2T">提权</h3>
+        <p data-i18n="f2D">设置里执行一次「安装命令」，写入 wg-quick 白名单并校验</p>
+      </div>
+      <div class="flow-step">
+        <span class="f-num"><i></i><span data-i18n="f3Num">03</span></span>
+        <svg class="f-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
+        <h3 data-i18n="f3T">选择</h3>
+        <p data-i18n="f3D">菜单栏选择配置，查看状态、接口与详情</p>
+      </div>
+      <div class="flow-step">
+        <span class="f-num"><i></i><span data-i18n="f4Num">04</span></span>
+        <svg class="f-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12M6 4v6a6 6 0 0 0 6 6m0 0a6 6 0 0 1 6-6m-6 6v4"/><path d="M4 20h16"/></svg>
+        <h3 data-i18n="f4T">启停</h3>
+        <p data-i18n="f4D">点一下启动或关闭，状态点实时更新</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 安全 ===== -->
+<section class="sec" id="security">
+  <div class="wrap">
+    <div class="security">
+      <div class="sec-left">
+        <h2><span class="line" data-i18n="secH1">提权只开一条缝，</span><span class="line" data-i18n="secH2">而且是唯一的一条。</span></h2>
+        <p data-i18n="secD">WireGuard Tray 不做任何「万能 sudo」。它只放行两个动作：启动一条配置、关闭一条配置。</p>
+        <div class="sec-list">
+          <div class="sec-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2EE26E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+            <span><span data-i18n="sec1T">仅本机调用，无网络服务</span><small data-i18n="sec1D">应用只在本机执行 wg-quick，不开放端口、不连接云。</small></span>
+          </div>
+          <div class="sec-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2EE26E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+            <span><span data-i18n="sec2T">命令精确匹配白名单</span><small data-i18n="sec2D">sudoers 仅放行 wg-quick 的 up / down 动作，绝对路径锁定，防止 PATH 劫持。</small></span>
+          </div>
+          <div class="sec-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2EE26E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+            <span><span data-i18n="sec3T">安装即校验，失败即回滚</span><small data-i18n="sec3D">写入后执行 visudo -c 校验，权限固定 0440 root:wheel。</small></span>
+          </div>
+          <div class="sec-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2EE26E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+            <span><span data-i18n="sec4T">密钥留在本地</span><small data-i18n="sec4D">隧道私钥仅存在于你的配置文件中，应用不采集、不上传任何数据。</small></span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="code-block">
+<span class="m"># /etc/sudoers.d/wireguard-tray</span>
+<span class="k">Defaults</span> secure_path="<span class="c">/opt/homebrew/bin</span>:/usr/bin:/bin:<span class="m">…</span>"
+<span class="k">%admin</span> ALL=(root) NOPASSWD: <span class="c">/opt/homebrew/Cellar/wireguard-tools/…/wg-quick</span> up *,
+                   <span class="c">/opt/homebrew/Cellar/wireguard-tools/…/wg-quick</span> down *
+        </div>
+        <p class="code-note mono" data-i18n="secNote">仅两个动作 · 绝对路径 · bash 4+ 环境自动保证</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 时间轴 ===== -->
+<section class="sec" id="road">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-tag" data-i18n="roadTag">ROADMAP</div>
+      <h2><span class="line" data-i18n="roadH1">从菜单栏原型，</span><span class="line" data-i18n="roadH2">到可信赖的日常工具。</span></h2>
+    </div>
+    <div class="road">
+      <div class="r-time">2026-09</div>
+      <div class="r-dot"><span></span></div>
+      <div class="r-card">
+        <h3 data-i18n="r1T">初始版本 v0.1.0 <span class="st done" data-i18n="stDone">已完成</span></h3>
+        <p data-i18n="r1D">菜单栏状态显示、一键启停、配置列表、PostUp/PostDown 网卡编辑、中英双语界面。</p>
+      </div>
+      <div class="r-time">2026-09</div>
+      <div class="r-dot"><span></span></div>
+      <div class="r-card">
+        <h3 data-i18n="r2T">提权与兼容打磨 <span class="st now" data-i18n="stNow">进行中</span></h3>
+        <p data-i18n="r2D">一次性 sudoers 白名单、外部隧道识别、配置路径扫描、/Applications 部署下的 PATH 与 bash 4+ 兼容修复。</p>
+      </div>
+      <div class="r-time">Next</div>
+      <div class="r-dot"><span class="soon"></span></div>
+      <div class="r-card">
+        <h3 data-i18n="r3T">分发与稳定版 <span class="st plan" data-i18n="stPlan">计划</span></h3>
+        <p data-i18n="r3D">代码签名与公证、自动更新、配置导入导出、Intel 真机验证矩阵。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 发布 ===== -->
+<section class="sec" id="release">
+  <div class="wrap">
+    <div class="release">
+      <div class="ver mono">LATEST RELEASE · v0.1.0</div>
+      <h2 data-i18n="relH">从这里开始，让隧道上线。</h2>
+      <p data-i18n="relD">v0.1.0 已发布，支持 macOS（Apple Silicon / Intel）。安装包与校验信息可在 GitHub Releases 获取，也可以从源码自行构建。</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/remixjc/wireguard-tools-gui-for-mac/releases" target="_blank" rel="noopener"><span data-i18n="relBtn">查看 Releases</span></a>
+        <a class="btn btn-ghost" href="https://github.com/remixjc/wireguard-tools-gui-for-mac" target="_blank" rel="noopener"><span data-i18n="relBtn2">在 GitHub 关注进展</span> →</a>
+      </div>
+      <div class="plats">
+        <span>● <b>macOS</b> Apple Silicon</span>
+        <span>● <b>macOS</b> Intel</span>
+        <span>⌘ <b>Homebrew</b> wireguard-tools</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FAQ ===== -->
+<section class="sec" id="faq">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-tag" data-i18n="faqTag">FAQ</div>
+      <h2 data-i18n="faqH">开始之前，你可能想知道。</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary><span data-i18n="q1">需要先安装什么？</span><span class="plus">+</span></summary>
+        <div class="ans" data-i18n="a1">只需 Homebrew 的 wireguard-tools：<code>brew install wireguard-tools</code>。然后把你的 .conf 配置放进 /opt/homebrew/etc/wireguard 或 /etc/wireguard。</div>
+      </details>
+      <details>
+        <summary><span data-i18n="q2">为什么第一次启停要输密码？</span><span class="plus">+</span></summary>
+        <div class="ans" data-i18n="a2">启停隧道需要 root 权限。在设置里执行一次「安装命令」写入 sudoers 白名单后即可全程免密；跳过安装则每次使用管理员授权弹窗，同样安全。</div>
+      </details>
+      <details>
+        <summary><span data-i18n="q3">报错 "Version mismatch: bash 3 detected" 怎么办？</span><span class="plus">+</span></summary>
+        <div class="ans" data-i18n="a3">wg-quick 要求 bash 4+，而 macOS 系统自带 bash 是 3.2。应用已自动使用 Homebrew bash（<code>/opt/homebrew/bin/bash</code>）执行，并保证 sudo 与授权弹窗两条路径的 PATH 都正确；如仍报错请确认已安装 bash 4+。</div>
+      </details>
+      <details>
+        <summary><span data-i18n="q4">配置放在哪里？</span><span class="plus">+</span></summary>
+        <div class="ans" data-i18n="a4">应用按 wg-quick 的标准顺序搜索：/etc/wireguard → /usr/local/etc/wireguard → /opt/homebrew/etc/wireguard，按名称去重列出，详情窗口可直接打开配置目录。</div>
+      </details>
+      <details>
+        <summary><span data-i18n="q5">与应用商店版本有什么区别？</span><span class="plus">+</span></summary>
+        <div class="ans" data-i18n="a5">商店版通常不开放自定义脚本能力。本应用直接管理 Homebrew 的 wg-quick，完整支持 PostUp / PostDown（含 networksetup 代理切换与自定义命令），配置就是你的 .conf 文件。</div>
+      </details>
+      <details>
+        <summary><span data-i18n="q6">会联网上传数据吗？</span><span class="plus">+</span></summary>
+        <div class="ans" data-i18n="a6">不会。应用只在本机调用 wg-quick，不开放网络端口、不需要账号、不上传任何配置或流量数据。</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Footer ===== -->
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="foot-l">
+      <span data-i18n="footNote">非官方项目 · 与 WireGuard 组织无关联 · </span>
+      <a href="https://github.com/remixjc/wireguard-tools-gui-for-mac/blob/main/LICENSE" target="_blank" rel="noopener" data-i18n="footLic">MIT License</a>
+    </div>
+    <div class="foot-r">
+      <a href="https://github.com/remixjc/wireguard-tools-gui-for-mac" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/remixjc/wireguard-tools-gui-for-mac/releases" target="_blank" rel="noopener" data-i18n="footRel">Releases</a>
+      <span class="mono" style="font-size:12px;color:var(--muted)">v0.1.0</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var dict = {
+    zh: {
+      brand:"WireGuard Tray<small> · macOS</small>",
+      navCap:"能力",navFlow:"使用流程",navSec:"安全",navRoad:"路线图",navFaq:"FAQ",
+      heroEyebrow:"macOS 菜单栏 · Homebrew wireguard-tools · 开源",
+      heroH1a:"让隧道，",heroH1b:"自然地待在那里。",
+      heroSub:"菜单栏里的 WireGuard 隧道管家：实时查看状态、一键启停、管理配置与 PostUp/PostDown 网卡，全部在本机完成。",
+      ctaDownload:"下载 v0.1.0",ctaSource:"浏览源代码",
+      check1:"本地优先",check2:"开源免费",check3:"无云端依赖",
+      mockStatus:"已连接 · utun8",mockStop:"关闭代理",mockDetail:"查看详情",mockSettings:"设置",mockQuit:"退出",
+      mockTip:"· 状态点随隧道实时变化",
+      stat1a:"个",stat1b:"菜单栏入口",stat2a:"条",stat2b:"提权路径（免密 / 管理员）",stat3a:"次",stat3b:"云端上传",stat4a:"种",stat4b:"网卡引用（设备 / 服务名）",
+      capsTag:"CAPABILITIES",capsH1:"复杂留给 wg-quick，",capsH2:"简单留给你。",
+      capsSub:"从菜单栏点开，到隧道上线，每个环节都清晰、可控。",
+      cap1Num:"01 · STATUS",cap1T:"状态一目了然",cap1D:"菜单栏绿点 / 灰点实时反映隧道连接；详情窗口显示接口名、运行标记与配置文件路径，外部启动的隧道也能正确识别。",
+      cap2Num:"02 · TOGGLE",cap2T:"一键启停",cap2D:"基于 wg-quick up / down 启停隧道。一次性安装 sudoers 白名单后全程免密；未安装时自动回退到管理员授权弹窗。",
+      cap3Num:"03 · CONFIG",cap3T:"配置即文件",cap3D:"自动扫描 /etc/wireguard、/usr/local/etc/wireguard 与 /opt/homebrew/etc/wireguard 等标准路径，按名称去重列出，随时打开配置目录。",
+      cap4Num:"04 · POSTUP",cap4T:"网卡编辑",cap4D:"PostUp / PostDown 中的接口引用可从系统枚举选择：支持设备名（utun8）与 networksetup 网络服务名（Ethernet），下拉即改、改完即存。",
+      cap5Num:"05 · L10N",cap5T:"中英双语",cap5D:"界面语言一键切换，状态、详情、设置与报错文案跟随你的使用习惯，开源协议与文档同样中英双写。",
+      cap6Num:"06 · OPEN",cap6T:"纯原生 AppKit",cap6D:"无第三方依赖的 SwiftPM 工程，菜单栏、窗口、系统枚举全部使用系统原生能力，构建与审计都更简单。",
+      flowTag:"WORKFLOW",flowH1:"四步，",flowH2:"跑起一条隧道。",
+      f1Num:"01",f1T:"安装",f1D:"配置放入 /opt/homebrew/etc/wireguard",
+      f2Num:"02",f2T:"提权",f2D:"设置里执行一次「安装命令」，写入 wg-quick 白名单并校验",
+      f3Num:"03",f3T:"选择",f3D:"菜单栏选择配置，查看状态、接口与详情",
+      f4Num:"04",f4T:"启停",f4D:"点一下启动或关闭，状态点实时更新",
+      secH1:"提权只开一条缝，",secH2:"而且是唯一的一条。",
+      secD:"WireGuard Tray 不做任何「万能 sudo」。它只放行两个动作：启动一条配置、关闭一条配置。",
+      sec1T:"仅本机调用，无网络服务",sec1D:"应用只在本机执行 wg-quick，不开放端口、不连接云。",
+      sec2T:"命令精确匹配白名单",sec2D:"sudoers 仅放行 wg-quick 的 up / down 动作，绝对路径锁定，防止 PATH 劫持。",
+      sec3T:"安装即校验，失败即回滚",sec3D:"写入后执行 visudo -c 校验，权限固定 0440 root:wheel。",
+      sec4T:"密钥留在本地",sec4D:"隧道私钥仅存在于你的配置文件中，应用不采集、不上传任何数据。",
+      secNote:"仅两个动作 · 绝对路径 · bash 4+ 环境自动保证",
+      roadTag:"ROADMAP",roadH1:"从菜单栏原型，",roadH2:"到可信赖的日常工具。",
+      r1T:"初始版本 v0.1.0",stDone:"已完成",r1D:"菜单栏状态显示、一键启停、配置列表、PostUp/PostDown 网卡编辑、中英双语界面。",
+      r2T:"提权与兼容打磨",stNow:"进行中",r2D:"一次性 sudoers 白名单、外部隧道识别、配置路径扫描、/Applications 部署下的 PATH 与 bash 4+ 兼容修复。",
+      r3T:"分发与稳定版",stPlan:"计划",r3D:"代码签名与公证、自动更新、配置导入导出、Intel 真机验证矩阵。",
+      relH:"从这里开始，让隧道上线。",
+      relD:"v0.1.0 已发布，支持 macOS（Apple Silicon / Intel）。安装包与校验信息可在 GitHub Releases 获取，也可以从源码自行构建。",
+      relBtn:"查看 Releases",relBtn2:"在 GitHub 关注进展",
+      faqTag:"FAQ",faqH:"开始之前，你可能想知道。",
+      q1:"需要先安装什么？",a1:"只需 Homebrew 的 wireguard-tools：brew install wireguard-tools。然后把你的 .conf 配置放进 /opt/homebrew/etc/wireguard 或 /etc/wireguard。",
+      q2:"为什么第一次启停要输密码？",a2:"启停隧道需要 root 权限。在设置里执行一次「安装命令」写入 sudoers 白名单后即可全程免密；跳过安装则每次使用管理员授权弹窗，同样安全。",
+      q3:"报错 \"Version mismatch: bash 3 detected\" 怎么办？",a3:"wg-quick 要求 bash 4+，而 macOS 系统自带 bash 是 3.2。应用已自动使用 Homebrew bash（/opt/homebrew/bin/bash）执行，并保证 sudo 与授权弹窗两条路径的 PATH 都正确；如仍报错请确认已安装 bash 4+。",
+      q4:"配置放在哪里？",a4:"应用按 wg-quick 的标准顺序搜索：/etc/wireguard → /usr/local/etc/wireguard → /opt/homebrew/etc/wireguard，按名称去重列出，详情窗口可直接打开配置目录。",
+      q5:"与应用商店版本有什么区别？",a5:"商店版通常不开放自定义脚本能力。本应用直接管理 Homebrew 的 wg-quick，完整支持 PostUp / PostDown（含 networksetup 代理切换与自定义命令），配置就是你的 .conf 文件。",
+      q6:"会联网上传数据吗？",a6:"不会。应用只在本机调用 wg-quick，不开放网络端口、不需要账号、不上传任何配置或流量数据。",
+      footNote:"非官方项目 · 与 WireGuard 组织无关联 · ",footLic:"MIT License",footRel:"Releases"
+    },
+    en: {
+      brand:"WireGuard Tray<small> · macOS</small>",
+      navCap:"Features",navFlow:"How it works",navSec:"Security",navRoad:"Roadmap",navFaq:"FAQ",
+      heroEyebrow:"macOS menu bar · Homebrew wireguard-tools · Open source",
+      heroH1a:"Your tunnel,",heroH1b:"right in the menu bar.",
+      heroSub:"A WireGuard tunnel manager for the menu bar: live status, one-click up/down, config browsing and PostUp/PostDown interface editing — all local.",
+      ctaDownload:"Download v0.1.0",ctaSource:"Browse source",
+      check1:"Local-first",check2:"Free & open source",check3:"No cloud",
+      mockStatus:"Connected · utun8",mockStop:"Disconnect",mockDetail:"Details",mockSettings:"Settings",mockQuit:"Quit",
+      mockTip:"· status dot tracks the tunnel live",
+      stat1a:"",stat1b:"menu-bar entry point",stat2a:"",stat2b:"privilege paths (NOPASSWD / admin)",stat3a:"",stat3b:"cloud uploads",stat4a:"",stat4b:"interface refs (device / service)",
+      capsTag:"CAPABILITIES",capsH1:"Complexity stays with wg-quick,",capsH2:"simplicity stays with you.",
+      capsSub:"From the first click in the menu bar to a running tunnel, every step is clear and controlled.",
+      cap1Num:"01 · STATUS",cap1T:"Status at a glance",cap1D:"A green/grey dot in the menu bar reflects the tunnel in real time; the detail window shows interface, run marker and config path — even tunnels started outside the app are recognized.",
+      cap2Num:"02 · TOGGLE",cap2T:"One-click up / down",cap2D:"Tunnels are started and stopped with wg-quick up / down. Install the sudoers whitelist once for passwordless control; otherwise it falls back to an admin prompt.",
+      cap3Num:"03 · CONFIG",cap3T:"Config is just a file",cap3D:"Scans the standard paths /etc/wireguard, /usr/local/etc/wireguard and /opt/homebrew/etc/wireguard, deduplicates by name, and opens the config folder on demand.",
+      cap4Num:"04 · POSTUP",cap4T:"Interface editing",cap4D:"Interface references in PostUp/PostDown are picked from the system: device names (utun8) and networksetup service names (Ethernet), edited from a dropdown and saved instantly.",
+      cap5Num:"05 · L10N",cap5T:"Bilingual UI",cap5D:"Switch the interface between Chinese and English in one click — status, details, settings and errors follow your language.",
+      cap6Num:"06 · OPEN",cap6T:"Pure AppKit",cap6D:"A SwiftPM project with zero third-party dependencies. Menu bar, windows and system enumeration all use native APIs — easier to build and audit.",
+      flowTag:"WORKFLOW",flowH1:"Four steps",flowH2:"to a running tunnel.",
+      f1Num:"01",f1T:"Install",f1D:"config goes to /opt/homebrew/etc/wireguard",
+      f2Num:"02",f2T:"Grant",f2D:"run the install command once in Settings to write and verify the whitelist",
+      f3Num:"03",f3T:"Select",f3D:"pick a config in the menu bar; see status, interface and details",
+      f4Num:"04",f4T:"Toggle",f4D:"click to start or stop; the status dot updates live",
+      secH1:"Privilege is one narrow slit —",secH2:"the only slit there is.",
+      secD:"WireGuard Tray never asks for a \"sudo anything\". It allows exactly two actions: bring a config up, take a config down.",
+      sec1T:"Local calls only, no network service",sec1D:"The app runs wg-quick locally — no open ports, no cloud.",
+      sec2T:"Exact-match command whitelist",sec2D:"sudoers allows only wg-quick up / down with absolute paths, so PATH hijacking is impossible.",
+      sec3T:"Verified on install, rolled back on failure",sec3D:"visudo -c runs after writing; permissions are pinned to 0440 root:wheel.",
+      sec4T:"Keys stay local",sec4D:"Private keys live only in your config files; the app collects and uploads nothing.",
+      secNote:"two actions only · absolute paths · bash 4+ guaranteed",
+      roadTag:"ROADMAP",roadH1:"From a menu-bar prototype",roadH2:"to a tool you trust daily.",
+      r1T:"Initial release v0.1.0",stDone:"Done",r1D:"Menu-bar status, one-click up/down, config list, PostUp/PostDown interface editing, bilingual UI.",
+      r2T:"Privilege & compat polish",stNow:"In progress",r2D:"One-shot sudoers whitelist, external tunnel detection, config path scanning, PATH and bash 4+ fixes when deployed to /Applications.",
+      r3T:"Distribution & stable",stPlan:"Planned",r3D:"Code signing and notarization, auto-update, config import/export, Intel hardware validation matrix.",
+      relH:"Start here — get your tunnel online.",
+      relD:"v0.1.0 is out for macOS (Apple Silicon / Intel). Binaries and checksums live on GitHub Releases; you can also build from source.",
+      relBtn:"View Releases",relBtn2:"Follow on GitHub",
+      faqTag:"FAQ",faqH:"Before you start, you may want to know.",
+      q1:"What do I need to install first?",a1:"Just the Homebrew wireguard-tools: brew install wireguard-tools. Then put your .conf files in /opt/homebrew/etc/wireguard or /etc/wireguard.",
+      q2:"Why does the first up/down ask for a password?",a2:"Starting a tunnel requires root. Run the install command once in Settings to write the sudoers whitelist for passwordless control; skip it and every action uses an admin prompt — equally safe.",
+      q3:"Error \"Version mismatch: bash 3 detected\"?",a3:"wg-quick requires bash 4+, but macOS ships bash 3.2. The app automatically executes via Homebrew bash (/opt/homebrew/bin/bash) and keeps the PATH correct on both the sudo and the admin-prompt paths; if it still appears, make sure bash 4+ is installed.",
+      q4:"Where are the configs?",a4:"The app follows wg-quick's search order: /etc/wireguard → /usr/local/etc/wireguard → /opt/homebrew/etc/wireguard, deduplicated by name, with one click to open the config folder from the detail window.",
+      q5:"What's the difference from the App Store version?",a5:"Store builds usually block custom scripts. This app drives Homebrew's wg-quick directly, with full PostUp/PostDown support (including networksetup proxy switching and custom commands) — the config is just your .conf file.",
+      q6:"Does it upload any data?",a6:"No. The app only runs wg-quick locally — no network ports, no accounts, no config or traffic uploaded.",
+      footNote:"Unofficial project · not affiliated with the WireGuard project · ",footLic:"MIT License",footRel:"Releases"
+    }
+  };
+  function apply(lang){
+    var d = dict[lang] || dict.zh;
+    document.querySelectorAll('[data-i18n]').forEach(function(el){
+      var key = el.getAttribute('data-i18n');
+      if(d[key] !== undefined) el.innerHTML = d[key];
+    });
+    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+    document.querySelectorAll('.lang-switch button').forEach(function(b){
+      b.classList.toggle('on', b.getAttribute('data-lang') === lang);
+    });
+  }
+  var saved = 'zh';
+  try { saved = localStorage.getItem('wgt-lang') || 'zh'; } catch(e){}
+  apply(saved);
+  document.querySelectorAll('.lang-switch button').forEach(function(b){
+    b.addEventListener('click', function(){
+      var lang = b.getAttribute('data-lang');
+      try { localStorage.setItem('wgt-lang', lang); } catch(e){}
+      apply(lang);
+    });
+  });
+})();
+</script>
+</body>
+</html>
