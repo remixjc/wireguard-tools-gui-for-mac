@@ -1,0 +1,17 @@
+# SwiftPM 构建产物
+.build/
+.build-xcode*/
+*.xcodeproj
+xcuserdata/
+
+# App 打包产物
+dist/
+*.app
+
+# macOS
+.DS_Store
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
