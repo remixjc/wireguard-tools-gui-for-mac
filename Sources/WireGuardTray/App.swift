@@ -72,9 +72,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openConfigFolder() {
-        let url = URL(fileURLWithPath: "/etc/wireguard")
-        if FileManager.default.fileExists(atPath: url.path) {
-            NSWorkspace.shared.open(url)
+        if let dir = ConfigParser.standardSearchDirectories.first(where: {
+            FileManager.default.fileExists(atPath: $0.path)
+        }) {
+            NSWorkspace.shared.open(dir)
         } else {
             presentAlert(
                 title: L10n.t("menu.openConfigFolder"),

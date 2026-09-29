@@ -90,4 +90,24 @@ public enum ConfigParser {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .compactMap { try? load(from: $0) }
     }
+
+    /// wg-quick 的完整配置搜索路径（与 wg-quick 脚本 CONFIG_SEARCH_PATHS 一致）
+    public static var standardSearchDirectories: [URL] {
+        ["/etc/wireguard", "/usr/local/etc/wireguard", "/opt/homebrew/etc/wireguard"]
+            .map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// 按 wg-quick 搜索路径扫描全部配置；同名配置优先取靠前目录，结果按名称排序
+    public static func scanAll() -> [TunnelConfig] {
+        var seen = Set<String>()
+        var result: [TunnelConfig] = []
+        for directory in standardSearchDirectories {
+            for config in scan(directory: directory) where !seen.contains(config.name) {
+                seen.insert(config.name)
+                result.append(config)
+            }
+        }
+        return result.sorted { $0.name < $1.name }
+    }
 }

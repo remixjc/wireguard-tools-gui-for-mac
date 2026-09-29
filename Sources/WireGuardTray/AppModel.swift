@@ -63,7 +63,7 @@ final class AppModel: ObservableObject {
     }
 
     func refreshTunnels() {
-        tunnels = ConfigParser.scan()
+        tunnels = ConfigParser.scanAll()
         if selectedName == nil || !tunnels.contains(where: { $0.name == selectedName }) {
             selectedName = tunnels.first?.name
         }
@@ -139,7 +139,9 @@ final class AppModel: ObservableObject {
 
     /// 标准配置目录中是否存在该配置（存在则用 wg-quick down 以获得完整 PostDown）
     private func hasLocalConfig(_ name: String) -> Bool {
-        FileManager.default.fileExists(atPath: "/etc/wireguard/\(name).conf")
+        ConfigParser.standardSearchDirectories.contains { directory in
+            FileManager.default.fileExists(atPath: directory.appendingPathComponent("\(name).conf").path)
+        }
     }
 
     /// 应用网卡选择到当前隧道配置：备份 + 原子写回
