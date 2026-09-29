@@ -152,6 +152,39 @@ public struct CommandService {
         run("/usr/bin/sudo", args: ["-n", "true"]).exitCode == 0
     }
 
+    // MARK: - 免密提权安装
+
+    /// 安装一次性免密 sudoers（写 /etc/sudoers.d/wireguard-tray + chmod + visudo -c），
+    /// 经 AppleScript 管理员权限执行。返回 (output, exitCode)，成功时 exitCode == 0。
+    public static func installSudoers() -> (output: String, exitCode: Int32) {
+        guard let wgQuick = wgQuickPath else {
+            return ("wg-quick 未找到，请先 brew install wireguard-tools", 1)
+        }
+        let script = """
+        #!/bin/bash
+        set -e
+        tee /etc/sudoers.d/wireguard-tray > /dev/null <<'WGEOF'
+        %admin ALL=(root) NOPASSWD: \(wgQuick) up *, \(wgQuick) down *
+        WGEOF
+        chmod 440 /etc/sudoers.d/wireguard-tray
+        visudo -c
+        """
+        return runAdminScript(script)
+    }
+
+    /// 以管理员权限执行一段 shell 脚本（写入临时文件后经 osascript 提权运行）
+    public static func runAdminScript(_ script: String) -> (output: String, exitCode: Int32) {
+        let tmp = "/tmp/wireguard-tray-\(UUID().uuidString.prefix(8)).sh"
+        do {
+            try script.write(toFile: tmp, atomically: true, encoding: .utf8)
+        } catch {
+            return ("写入临时脚本失败: \(error)", 1)
+        }
+        defer { try? FileManager.default.removeItem(atPath: tmp) }
+        let osa = adminScript(["bash", tmp])
+        return run("/usr/bin/osascript", args: ["-e", osa])
+    }
+
     // MARK: - 基础执行
 
     static func run(_ executable: String, args: [String]) -> (output: String, exitCode: Int32) {

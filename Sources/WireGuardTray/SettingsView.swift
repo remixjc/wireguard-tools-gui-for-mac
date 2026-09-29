@@ -13,12 +13,13 @@ final class SettingsWindow: NSWindow {
     private var launchHint: NSTextField!
     private var privilegeStatus: NSTextField!
     private var commandField: NSTextField!
-    private var copyButton: NSButton!
+    private var installButton: NSButton!
+    private var feedbackLabel: NSTextField!
 
     init(model: AppModel) {
         self.model = model
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 360),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -29,7 +30,7 @@ final class SettingsWindow: NSWindow {
     }
 
     func rebuild() {
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 360))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
 
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -102,9 +103,16 @@ final class SettingsWindow: NSWindow {
         commandField = command
         stack.addArrangedSubview(command)
 
-        let copy = NSButton(title: L10n.t("settings.copyCommand"), target: self, action: #selector(copyCommand(_:)))
-        copyButton = copy
-        stack.addArrangedSubview(copy)
+        let install = NSButton(title: L10n.t("settings.installCommand"), target: self, action: #selector(installPrivilege(_:)))
+        install.bezelStyle = .rounded
+        install.isEnabled = !ready
+        installButton = install
+        stack.addArrangedSubview(install)
+
+        let feedback = NSTextField(wrappingLabelWithString: "")
+        feedback.font = .systemFont(ofSize: NSFont.smallSystemFontSize + 1)
+        feedbackLabel = feedback
+        stack.addArrangedSubview(feedback)
 
         contentView = content
         contentView?.needsLayout = true
@@ -151,13 +159,28 @@ final class SettingsWindow: NSWindow {
         }
     }
 
-    @objc private func copyCommand(_ sender: NSButton) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(installCommand, forType: .string)
-        copyButton.title = L10n.t("settings.copied")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.copyButton.title = L10n.t("settings.copyCommand")
+    @objc private func installPrivilege(_ sender: NSButton) {
+        sender.isEnabled = false
+        sender.title = L10n.t("settings.installing")
+        feedbackLabel.stringValue = ""
+        Task { @MainActor in
+            let result = await Task.detached(priority: .userInitiated) {
+                CommandService.installSudoers()
+            }.value
+            let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if result.exitCode == 0 {
+                feedbackLabel.stringValue = L10n.t("settings.installSuccess")
+                feedbackLabel.textColor = .systemGreen
+                privilegeStatus.stringValue = L10n.t("settings.privilegeReady")
+                privilegeStatus.textColor = .systemGreen
+                sender.title = L10n.t("settings.installCommand")
+                sender.isEnabled = false // 已就绪，无需再装
+            } else {
+                feedbackLabel.stringValue = L10n.t("settings.installFailed", output.isEmpty ? "exit \(result.exitCode)" : output)
+                feedbackLabel.textColor = .systemRed
+                sender.title = L10n.t("settings.installCommand")
+                sender.isEnabled = true
+            }
         }
     }
 }
