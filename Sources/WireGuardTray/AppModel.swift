@@ -23,7 +23,9 @@ final class AppModel: ObservableObject {
     init() {
         refreshAll()
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshStatus() }
+            Task { @MainActor [weak self] in
+                self?.refreshStatus()
+            }
         }
     }
 

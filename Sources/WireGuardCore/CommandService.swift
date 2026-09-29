@@ -34,7 +34,8 @@ public enum CommandError: LocalizedError, Equatable {
 public struct CommandService {
 
     private static let prefixLock = NSLock()
-    private static var _brewPrefix: String?
+    // 由 prefixLock 保护；标记 nonisolated(unsafe) 以满足 Swift 6 并发检查
+    nonisolated(unsafe) private static var _brewPrefix: String?
 
     // MARK: - 路径定位
 
