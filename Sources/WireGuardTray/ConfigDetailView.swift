@@ -26,7 +26,22 @@ final class DetailWindow: NSWindow {
         )
         title = L10n.t("detail.title")
         isReleasedWhenClosed = false
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(statusChanged),
+            name: .wireGuardStatusChanged,
+            object: nil
+        )
         buildUI()
+        reload()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    /// 状态轮询完成时刷新窗口（启停后状态立即更新）
+    @objc private func statusChanged() {
         reload()
     }
 
@@ -135,7 +150,7 @@ final class DetailWindow: NSWindow {
         lastConfigName = tunnel.name
 
         titleLabel.stringValue = tunnel.name
-        let running = model.isRunning && model.activeTunnelName == tunnel.name
+        let running = model.tunnelIsRunning(tunnel.name)
         stateLabel.stringValue = running ? L10n.t("detail.running") : L10n.t("detail.stopped")
         stateLabel.textColor = running ? .systemGreen : .secondaryLabelColor
 

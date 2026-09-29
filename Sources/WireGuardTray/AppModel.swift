@@ -2,6 +2,11 @@ import Foundation
 import Combine
 import WireGuardCore
 
+extension Notification.Name {
+    /// 隧道状态刷新完成（详情窗口等 UI 监听刷新）
+    static let wireGuardStatusChanged = Notification.Name("wireGuardStatusChanged")
+}
+
 /// 应用全局状态：隧道列表、运行状态、网卡列表、操作编排
 @MainActor
 final class AppModel: ObservableObject {
@@ -82,6 +87,21 @@ final class AppModel: ObservableObject {
         } else {
             status = .disconnected
         }
+        NotificationCenter.default.post(name: .wireGuardStatusChanged, object: nil)
+    }
+
+    /// 判断指定配置是否真正在运行。
+    /// 1) 配置名恰为活跃接口；2) wg-quick 记录的真实接口名活跃（/var/run/wireguard/<name>.name，
+    ///    root 权限，可能不可读，尝试读取）；3) 兜底：系统有任意 WireGuard 隧道在运行（外部启动场景）
+    func tunnelIsRunning(_ name: String) -> Bool {
+        let up = CommandService.showInterfaces()
+        if up.contains(name) { return true }
+        let marker = "/var/run/wireguard/\(name).name"
+        if let content = try? String(contentsOfFile: marker, encoding: .utf8) {
+            let iface = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !iface.isEmpty && up.contains(iface) { return true }
+        }
+        return isRunning
     }
 
     func refreshInterfaces() {
