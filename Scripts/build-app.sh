@@ -21,6 +21,17 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 
+# 应用图标（Assets/AppIcon.icns，由 Assets/AppIcon-source-1024.png 生成）
+if [ -f "Assets/AppIcon.icns" ]; then
+    cp "Assets/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+    ICON_KEY="    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+"
+else
+    ICON_KEY=""
+    echo "    (未找到 Assets/AppIcon.icns，跳过图标)"
+fi
+
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -42,7 +53,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
-    <key>LSMinimumSystemVersion</key>
+${ICON_KEY}    <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
