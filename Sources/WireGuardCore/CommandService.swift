@@ -113,8 +113,7 @@ public struct CommandService {
         let sudoResult = run("/usr/bin/sudo", args: ["-n"] + args)
         if sudoResult.exitCode == 0 { return }
 
-        let quoted = args.map(shellEscaped).joined(separator: " ")
-        let script = "do shell script \"\(quoted)\" with administrator privileges"
+        let script = adminScript(args)
         let osa = run("/usr/bin/osascript", args: ["-e", script])
         guard osa.exitCode == 0 else {
             throw CommandError.executionFailed(
@@ -137,8 +136,7 @@ public struct CommandService {
         if sudoResult.exitCode == 0 { return }
 
         // 2) AppleScript 提权兜底
-        let quoted = args.map(shellEscaped).joined(separator: " ")
-        let script = "do shell script \"\(quoted)\" with administrator privileges"
+        let script = adminScript(args)
         let osa = run("/usr/bin/osascript", args: ["-e", script])
         guard osa.exitCode == 0 else {
             throw CommandError.executionFailed(
@@ -179,6 +177,16 @@ public struct CommandService {
         guard result.exitCode == 0 else { return nil }
         let path = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
         return path.isEmpty ? nil : path
+    }
+
+    /// 生成 AppleScript 管理员提权脚本。
+    /// 参数先各自做 shell 转义（`"..."`），再把整条命令嵌入 AppleScript 字符串时
+    /// 转义其中的双引号与反斜杠，避免双重引号导致的 -2740 语法错误。
+    private static func adminScript(_ args: [String]) -> String {
+        let command = args.map(shellEscaped).joined(separator: " ")
+        var escaped = command.replacingOccurrences(of: "\\", with: "\\\\")
+        escaped = escaped.replacingOccurrences(of: "\"", with: "\\\"")
+        return "do shell script \"\(escaped)\" with administrator privileges"
     }
 
     private static func shellEscaped(_ value: String) -> String {
