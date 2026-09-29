@@ -148,19 +148,33 @@ final class DetailWindow: NSWindow {
                 interfacePopup.addItem(withTitle: "\(iface.displayName) · \(iface.name)")
                 interfacePopup.lastItem?.representedObject = iface.name
             }
-            let current = PostUpEditor.referencedInterface(in: tunnel) ?? ""
-            if let index = (0..<interfacePopup.numberOfItems).first(where: {
-                (interfacePopup.item(at: $0)?.representedObject as? String) == current
-            }) {
-                interfacePopup.selectItem(at: index)
+            let current = PostUpEditor.referenced(in: tunnel)
+            // 匹配：设备名直接命中；networksetup 服务名命中对应项的服务名
+            let matchedIndex = (0..<interfacePopup.numberOfItems).first { index in
+                guard let name = interfacePopup.item(at: index)?.representedObject as? String,
+                      !name.isEmpty else { return false }
+                if name == current?.value { return true }
+                if let iface = model.interfaces.first(where: { $0.name == name }),
+                   iface.displayName == current?.value {
+                    return true
+                }
+                return false
+            }
+            if let matchedIndex {
+                interfacePopup.selectItem(at: matchedIndex)
             } else {
                 interfacePopup.selectItem(at: 0)
             }
             applyButton.isEnabled = !((interfacePopup.selectedItem?.representedObject as? String)?.isEmpty ?? true)
         }
 
-        if let current = PostUpEditor.referencedInterface(in: tunnel) {
-            referenceLabel.stringValue = L10n.t("detail.currentInterface") + ": \(current)"
+        if let current = PostUpEditor.referenced(in: tunnel) {
+            switch current.kind {
+            case .device:
+                referenceLabel.stringValue = L10n.t("detail.currentRefDevice") + ": \(current.value)"
+            case .serviceName:
+                referenceLabel.stringValue = L10n.t("detail.currentRefService") + ": \(current.value)"
+            }
         } else {
             referenceLabel.stringValue = L10n.t("detail.noReference")
         }
@@ -200,9 +214,10 @@ final class DetailWindow: NSWindow {
     @objc private func applyInterface(_ sender: NSButton) {
         guard let tunnel = model.selectedTunnel else { return }
         let name = interfacePopup.selectedItem?.representedObject as? String ?? ""
-        guard !name.isEmpty else { return }
+        guard !name.isEmpty,
+              let iface = model.interfaces.first(where: { $0.name == name }) else { return }
         do {
-            try model.applyInterface(name, to: tunnel)
+            try model.applyInterface(iface, to: tunnel)
             feedbackLabel.stringValue = L10n.t("detail.applied")
             feedbackLabel.textColor = .systemGreen
             reload()

@@ -144,9 +144,14 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// 应用网卡选择到当前隧道配置：备份 + 原子写回
-    func applyInterface(_ interfaceName: String, to config: TunnelConfig) throws {
-        let updated = PostUpEditor.applyingInterface(interfaceName, to: config)
+    /// 应用网卡选择到当前隧道配置：备份 + 原子写回。
+    /// dev 引用替换为设备名；networksetup 引用替换为服务名（displayName）
+    func applyInterface(_ iface: NetworkInterface, to config: TunnelConfig) throws {
+        let updated = PostUpEditor.applyingInterface(
+            iface.name,
+            serviceName: iface.displayName,
+            to: config
+        )
         try PostUpEditor.save(updated, backup: true)
         refreshTunnels()
         refreshStatus()

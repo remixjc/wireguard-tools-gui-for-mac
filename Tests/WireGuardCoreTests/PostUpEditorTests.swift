@@ -59,6 +59,82 @@ final class PostUpEditorTests: XCTestCase {
         XCTAssertFalse(PostUpEditor.hasInterfaceReference(in: plain))
     }
 
+    // MARK: - networksetup 服务名模式
+
+    func testExtractNetworkServiceReference() {
+        XCTAssertEqual(
+            PostUpEditor.references(in: "networksetup -setsocksfirewallproxy \"Ethernet\" 127.0.0.1 7890"),
+            [PostUpReference(kind: .serviceName, value: "Ethernet")]
+        )
+        XCTAssertEqual(
+            PostUpEditor.references(in: "networksetup -setsocksfirewallproxystate \"Wi-Fi\" off"),
+            [PostUpReference(kind: .serviceName, value: "Wi-Fi")]
+        )
+        // 无引号形式
+        XCTAssertEqual(
+            PostUpEditor.references(in: "networksetup -setwebproxy Ethernet 127.0.0.1 8080"),
+            [PostUpReference(kind: .serviceName, value: "Ethernet")]
+        )
+        // 非 networksetup 行仍走 dev 模式
+        XCTAssertEqual(
+            PostUpEditor.references(in: "ip route add default dev utun8 table 51820"),
+            [PostUpReference(kind: .device, value: "utun8")]
+        )
+    }
+
+    func testReplaceNetworkServiceReferenceKeepsQuotes() {
+        let line = "networksetup -setsocksfirewallproxy \"Ethernet\" 127.0.0.1 7890"
+        XCTAssertEqual(
+            PostUpEditor.replacingReference(in: line, with: "Wi-Fi"),
+            "networksetup -setsocksfirewallproxy \"Wi-Fi\" 127.0.0.1 7890"
+        )
+        let unquoted = "networksetup -setwebproxy Ethernet 127.0.0.1 8080"
+        XCTAssertEqual(
+            PostUpEditor.replacingReference(in: unquoted, with: "Wi-Fi"),
+            "networksetup -setwebproxy Wi-Fi 127.0.0.1 8080"
+        )
+    }
+
+    func testReferencedReturnsServiceName() {
+        let config = makeConfig(
+            postUp: "networksetup -setsocksfirewallproxy \"Ethernet\" 127.0.0.1 7890",
+            postDown: "networksetup -setsocksfirewallproxystate \"Ethernet\" off"
+        )
+        XCTAssertEqual(
+            PostUpEditor.referenced(in: config),
+            PostUpReference(kind: .serviceName, value: "Ethernet")
+        )
+    }
+
+    func testApplyingInterfaceWithServiceName() {
+        let config = makeConfig(
+            postUp: "networksetup -setsocksfirewallproxy \"Ethernet\" 127.0.0.1 7890",
+            postDown: "networksetup -setsocksfirewallproxystate \"Ethernet\" off"
+        )
+        // 服务名替换：设备名 en0 → 服务名 Wi-Fi
+        let updated = PostUpEditor.applyingInterface("en0", serviceName: "Wi-Fi", to: config)
+        XCTAssertEqual(
+            updated.postUpLines.first,
+            "networksetup -setsocksfirewallproxy \"Wi-Fi\" 127.0.0.1 7890"
+        )
+        XCTAssertEqual(
+            updated.postDownLines.first,
+            "networksetup -setsocksfirewallproxystate \"Wi-Fi\" off"
+        )
+    }
+
+    func testApplyingInterfaceMixedModes() {
+        let config = makeConfig(
+            postUp: "networksetup -setsocksfirewallproxy \"Ethernet\" 127.0.0.1 7890 && ip route add default dev utun8 table 51820",
+            postDown: nil
+        )
+        let updated = PostUpEditor.applyingInterface("en1", serviceName: "Wi-Fi", to: config)
+        XCTAssertEqual(
+            updated.postUpLines.first,
+            "networksetup -setsocksfirewallproxy \"Wi-Fi\" 127.0.0.1 7890 && ip route add default dev en1 table 51820"
+        )
+    }
+
     func testApplyingInterfaceUpdatesBothUpAndDown() {
         var config = makeConfig(
             postUp: "ip route add default dev utun8 table 51820",
