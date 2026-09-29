@@ -71,8 +71,14 @@ final class AppModel: ObservableObject {
 
     func refreshStatus() {
         let upInterfaces = CommandService.showInterfaces()
+        // 1) 优先：选中的配置名恰好是活跃接口（标准 wg-quick 场景）
         if let name = selectedName, upInterfaces.contains(name) {
             status = .connected(interface: name)
+        }
+        // 2) macOS 上 wg-quick 创建的接口是系统分配的 utunN，与配置名不一致；
+        //    只要系统里有 WireGuard 隧道在运行（无论由本应用还是外部启动），都识别为已连接
+        else if let first = upInterfaces.first {
+            status = .connected(interface: first)
         } else {
             status = .disconnected
         }
@@ -108,18 +114,32 @@ final class AppModel: ObservableObject {
     }
 
     func stopTunnel() async {
-        guard let name = selectedName, !isBusy else { return }
+        guard !isBusy else { return }
         isBusy = true
         defer { isBusy = false }
         do {
-            try await Task.detached(priority: .userInitiated) {
-                try CommandService.down(configName: name)
-            }.value
+            // 标准场景：配置存在于 /etc/wireguard → wg-quick down（完整执行 PostDown）
+            if let name = selectedName, hasLocalConfig(name) {
+                try await Task.detached(priority: .userInitiated) {
+                    try CommandService.down(configName: name)
+                }.value
+            }
+            // 外部启动的隧道（配置不在标准位置）：销毁 utun 接口断开隧道
+            else if let active = activeTunnelName {
+                try await Task.detached(priority: .userInitiated) {
+                    try CommandService.destroyInterface(active)
+                }.value
+            }
             lastError = nil
             refreshStatus()
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    /// 标准配置目录中是否存在该配置（存在则用 wg-quick down 以获得完整 PostDown）
+    private func hasLocalConfig(_ name: String) -> Bool {
+        FileManager.default.fileExists(atPath: "/etc/wireguard/\(name).conf")
     }
 
     /// 应用网卡选择到当前隧道配置：备份 + 原子写回

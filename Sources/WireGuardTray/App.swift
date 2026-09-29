@@ -132,6 +132,17 @@ extension AppDelegate: NSMenuDelegate {
         statusRow.isEnabled = false
         menu.addItem(statusRow)
 
+        // 外部启动隧道的提示
+        if model.isRunning && model.tunnels.isEmpty {
+            let externalHint = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            externalHint.isEnabled = false
+            externalHint.attributedTitle = NSAttributedString(string: L10n.t("menu.externalTunnel"), attributes: [
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            ])
+            menu.addItem(externalHint)
+        }
+
         if let error = model.lastError {
             let errItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
             errItem.isEnabled = false
@@ -146,7 +157,8 @@ extension AppDelegate: NSMenuDelegate {
         let toggleTitle = model.isRunning ? L10n.t("action.stop") : L10n.t("action.start")
         let toggle = NSMenuItem(title: toggleTitle, action: #selector(toggleTunnel), keyEquivalent: "")
         toggle.target = self
-        toggle.isEnabled = !model.isBusy && model.selectedTunnel != nil
+        // 有本地配置可启动；或系统已有隧道在运行（外部启动）可停止
+        toggle.isEnabled = !model.isBusy && (model.selectedTunnel != nil || model.isRunning)
         menu.addItem(toggle)
 
         menu.addItem(.separator())

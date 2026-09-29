@@ -101,6 +101,30 @@ public struct CommandService {
         try toggle(configName: configName, up: false)
     }
 
+    /// 直接销毁隧道接口（`ifconfig <iface> destroy`，需 root）。
+    /// 用于停止由外部启动、配置不在 /etc/wireguard 的隧道（无法用 wg-quick down 定位配置时）。
+    public static func destroyInterface(_ iface: String) throws {
+        let trimmed = iface.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw CommandError.executionFailed(command: "ifconfig destroy", exitCode: 1, output: "接口名为空")
+        }
+        let args = ["/sbin/ifconfig", trimmed, "destroy"]
+
+        let sudoResult = run("/usr/bin/sudo", args: ["-n"] + args)
+        if sudoResult.exitCode == 0 { return }
+
+        let quoted = args.map(shellEscaped).joined(separator: " ")
+        let script = "do shell script \"\(quoted)\" with administrator privileges"
+        let osa = run("/usr/bin/osascript", args: ["-e", script])
+        guard osa.exitCode == 0 else {
+            throw CommandError.executionFailed(
+                command: "ifconfig \(trimmed) destroy",
+                exitCode: osa.exitCode,
+                output: osa.output
+            )
+        }
+    }
+
     private static func toggle(configName: String, up: Bool) throws {
         guard let wgQuick = wgQuickPath else {
             throw CommandError.toolNotFound("wg-quick")
